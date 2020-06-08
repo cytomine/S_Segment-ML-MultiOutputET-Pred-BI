@@ -1,0 +1,211 @@
+{
+  "command-line": "python run.py CYTOMINE_HOST CYTOMINE_PUBLIC_KEY CYTOMINE_PRIVATE_KEY CYTOMINE_ID_PROJECT CYTOMINE_ID_SOFTWARE CYTOMINE_ID_IMAGES CYTOMINE_PREDICT_TERM CYTOMINE_ZOOM_LEVEL CYTOMINE_TILE_SIZE CYTOMINE_TILE_OVERLAP CYTOMINE_ROI_TERM UNION_ENABLED MIN_ANNOTATION_AREA MAX_ANNOTATION_AREA TILE_FILTER_MIN_STDDEV TILE_FILTER_MAX_MEAN CYTOMINE_ID_JOB PYXIT_PREDICTION_STEP",
+  "inputs": [
+    {
+      "name": "Cytomine host",
+      "description": "Cytomine server hostname",
+      "set-by-server": true,
+      "value-key": "@ID",
+      "optional": false,
+      "id": "cytomine_host",
+      "type": "String",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Cytomine public key",
+      "description": "Cytomine public key",
+      "set-by-server": true,
+      "value-key": "@ID",
+      "optional": false,
+      "id": "cytomine_public_key",
+      "type": "String",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Cytomine private key",
+      "description": "Cytomine private key",
+      "set-by-server": true,
+      "value-key": "@ID",
+      "optional": false,
+      "id": "cytomine_private_key",
+      "type": "String",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Cytomine project id",
+      "description": "Cytomine project id",
+      "set-by-server": true,
+      "value-key": "@ID",
+      "optional": false,
+      "id": "cytomine_id_project",
+      "type": "Number",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Cytomine software id",
+      "description": "Cytomine software id",
+      "set-by-server": true,
+      "value-key": "@ID",
+      "optional": false,
+      "id": "cytomine_id_software",
+      "type": "Number",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Cytomine image identifiers",
+      "description": "The identifiers of the images to process. If not specified all image of the project will be processed.",
+      "set-by-server": false,
+      "value-key": "@ID",
+      "optional": true,
+      "id": "cytomine_id_images",
+      "type": "ListDomain",
+      "uri": "/api/project/$currentProject$/imageinstance.json",
+      "uri-print-attribute": "instanceFilename",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Cytomine predict term identifier",
+      "description": "Identifier of the term to associate with the annotations of the segmented elements.",
+      "set-by-server": false,
+      "value-key": "@ID",
+      "optional": false,
+      "id": "cytomine_predict_term",
+      "type": "Domain",
+      "uri": "/api/project/$currentProject$/term.json",
+      "uri-print-attribute": "name",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Zoom level",
+      "description": "The zoom level to apply when fetching the tiles (0 for maximum resolution)",
+      "set-by-server": false,
+      "value-key": "@ID",
+      "default-value": 0,
+      "optional": true,
+      "id": "cytomine_zoom_level",
+      "type": "Number",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Tile size",
+      "description": "The size of the square tiles in pixels. Each processed image will be splitted into a set of tiles that will be processed independently. If union is enabled, the polygons found on each tiles will be merged when necessary.",
+      "set-by-server": false,
+      "value-key": "@ID",
+      "default-value": 512,
+      "optional": true,
+      "id": "cytomine_tile_size",
+      "type": "Number",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Tile overlap",
+      "description": "The overlap between tiles to extract (suggested: equal to the pyxit window target dimensions)",
+      "set-by-server": false,
+      "value-key": "@ID",
+      "default-value": 24,
+      "optional": true,
+      "id": "cytomine_tile_overlap",
+      "type": "Number",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Region of interest term identifier",
+      "description": "If a term identifier is provided, the segmentation will be executed only inside of the region of interest which are associated the given term (disabled by default, value -1).",
+      "set-by-server": false,
+      "value-key": "@ID",
+      "optional": true,
+      "id": "cytomine_roi_term",
+      "type": "Domain",
+      "uri": "/api/project/$currentProject$/term.json",
+      "uri-print-attribute": "name",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Union enabled",
+      "description": "Whether or not to perform union of detected polygons over tiles.",
+      "set-by-server": false,
+      "value-key": "@ID",
+      "default-value": true,
+      "optional": true,
+      "id": "union_enabled",
+      "type": "Boolean",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Min annotations area",
+      "description": "Minimum area for annotations. Annotations of which the area is smaller are not uploaded to the server (disabled by default).",
+      "set-by-server": false,
+      "value-key": "@ID",
+      "default-value": 0,
+      "optional": true,
+      "id": "min_annotation_area",
+      "type": "Number",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Max annotations area",
+      "description": "Maximum area for annotations. Annotations of which the area is larger are not uploaded to the server (-1 for disabling the filter, disabled by default).",
+      "set-by-server": false,
+      "value-key": "@ID",
+      "default-value": -1,
+      "optional": true,
+      "id": "max_annotation_area",
+      "type": "Number",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Minimum standard deviation for tile filtering",
+      "description": "Minimum standard devation to consider for empty tiles filtering (see tile_filter_enabled for more information).",
+      "set-by-server": false,
+      "value-key": "@ID",
+      "default-value": 0,
+      "optional": true,
+      "id": "tile_filter_min_stddev",
+      "type": "Number",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Maximum mean for tile filtering",
+      "description": "Maximum mean to consider for empty tiles filtering (see tile_filter_enabled for more information).",
+      "set-by-server": false,
+      "value-key": "@ID",
+      "default-value": 255,
+      "optional": true,
+      "id": "tile_filter_max_mean",
+      "type": "Number",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Training job identifier",
+      "description": "Identifier of the training job. The job should have the trained model attached (as a \"model.joblib\" attached file) and the properties \u0027binary\u0027, \u0027classes\u0027 and \u0027positive_classes\u0027.",
+      "set-by-server": false,
+      "value-key": "@ID",
+      "optional": false,
+      "id": "cytomine_id_job",
+      "type": "Domain",
+      "uri": "/api/job.json?project=$currentProject$",
+      "uri-sort-attribute": "softwareName",
+      "uri-print-attribute": "softwareName",
+      "command-line-flag": "--@id"
+    },
+    {
+      "name": "Prediction step",
+      "description": "Number of pixel to skip for each prediction. By default all pixels get a prediction (value 1)",
+      "set-by-server": false,
+      "value-key": "@ID",
+      "default-value": 1,
+      "optional": true,
+      "id": "pyxit_prediction_step",
+      "type": "Number",
+      "command-line-flag": "--@id"
+    }
+  ],
+  "name": "Segment-ML-MultiOutputET-Pred-BI",
+  "description": "Segmentation based on extra trees",
+  "schema-version": "cytomine-0.1",
+  "container-image": {
+    "image": "cytomineuliege/s_segment-ml-multioutputet-pred-bi",
+    "type": "singularity"
+  }
+}
+
