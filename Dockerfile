@@ -9,8 +9,8 @@ RUN git clone https://github.com/cytomine-uliege/Cytomine-python-client.git && \
     rm -r /Cytomine-python-client
 
 # --------------------------------------------------------------------------------------------
-# Instal Pyxit
-RUN pip install pyxit==1.1.5
+# Instal Pyxit, Skimage and SLDC
+RUN pip install pyxit==1.1.5 scikit-image==0.17.2 sldc==1.2.0 sldc-cytomine==1.2
 
 # --------------------------------------------------------------------------------------------
 # Instal Pyxit

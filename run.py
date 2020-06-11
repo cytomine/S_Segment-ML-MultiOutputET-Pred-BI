@@ -7,7 +7,7 @@ from skimage.transform import resize
 
 from cytomine import CytomineJob
 from cytomine.models import ImageInstanceCollection, ImageInstance, AttachedFileCollection, Job, PropertyCollection, \
-    AnnotationCollection
+    AnnotationCollection, Annotation
 from cytomine.utilities.software import parse_domain_list, str2bool
 from sldc import SemanticSegmenter, SSLWorkflowBuilder, StandardOutputLogger, Logger
 from sldc_cytomine import CytomineTileBuilder, CytomineSlide
@@ -25,7 +25,7 @@ class ExtraTreesSegmenter(SemanticSegmenter):
     def _process_tile(self, image):
         channels = [image]
         if image.ndim > 2:
-            channels = [image[:, :, i] for i in image.shape[2]]
+            channels = [image[:, :, i] for i in range(image.shape[2])]
         return np.any([
             np.std(c) > self._min_std or np.mean(c) < self._max_mean
             for c in channels
@@ -64,13 +64,16 @@ class AnnotationAreaChecker(object):
 def main(argv):
     with CytomineJob.from_cli(argv) as cj:
         # use only images from the current project
-        cj.job.update(progress=1, statuscomment="Preparing execution (creating folders,...).")
+        cj.job.update(progress=1, statusComment="Preparing execution (creating folders,...).")
 
-        if cj.parameters.cytomine_zoom_level != 0:
-            raise ValueError("Zoom level > 0 not supported.")
+        if cj.parameters.zoom_level > 0 and (cj.parameters.cytomine_tile_size != 256 or cj.parameters.cytomine_tile_overlap != 0):
+            raise ValueError("when using zoom_level > 0, tile size should be 256 "
+                             "(given {}) and overlap should be 0 (given {})".format(
+                cj.parameters.cytomine_tile_size, cj.parameters.cytomine_tile_overlap))
 
+        cj.job.update(progress=1, statusComment="Preparing execution (creating folders,...).")
         # working path
-        root_path = Path.home()
+        root_path = str(Path.home())
         working_path = os.path.join(root_path, "images")
 
         # load training information
@@ -90,15 +93,18 @@ def main(argv):
         # set n_jobs
         pyxit.base_estimator.n_jobs = cj.parameters.n_jobs
         pyxit.n_jobs = cj.parameters.n_jobs
+        pyxit.n_subwindows = 1
 
+        cj.job.update(progress=25, statusComment="Load image metadata.")
         # extract images to process
         images = ImageInstanceCollection()
         if cj.parameters.cytomine_id_images is not None:
-            id_images = parse_domain_list(cj.parameters.id_images)
+            id_images = parse_domain_list(cj.parameters.cytomine_id_images)
             images.extend([ImageInstance().fetch(_id) for _id in id_images])
         else:
             images = images.fetch_with_filter("project", cj.project.id)
 
+        cj.job.update(progress=45, statusComment="Build workflow.")
         builder = SSLWorkflowBuilder()
         builder.set_tile_size(cj.parameters.cytomine_tile_size, cj.parameters.cytomine_tile_size)
         builder.set_overlap(cj.parameters.cytomine_tile_overlap)
@@ -108,13 +114,13 @@ def main(argv):
         builder.set_background_class(0)
         # value 0 will prevent merging but still requires to run the merging check
         # procedure (inefficient)
-        builder.set_distance_tolerance(1 if cj.parameters.union_enabled else 0)
+        builder.set_distance_tolerance(2 if cj.parameters.union_enabled else 0)
         builder.set_segmenter(ExtraTreesSegmenter(
             pyxit=pyxit,
             classes=[0] + ([cj.parameters.cytomine_predict_term] if binary else foreground_classes),
-            prediction_step=cj.parameters.cytomine_prediction_step,
+            prediction_step=cj.parameters.pyxit_prediction_step,
             background=0,
-            min_std=cj.parameters.tile_filter_min_std,
+            min_std=cj.parameters.tile_filter_min_stddev,
             max_mean=cj.parameters.tile_filter_max_mean
         ))
         workflow = builder.get()
@@ -124,10 +130,24 @@ def main(argv):
             min_area=cj.parameters.min_annotation_area,
             max_area=cj.parameters.max_annotation_area
         )
-        for image in images:
-            wsi = CytomineSlide(image.id)
+
+        def get_term(label):
+            if len(foreground_classes) == 1:
+                return foreground_classes
+            if not binary:
+                return [foreground_classes[label - 1]]
+            # binary
+            if cj.parameters.cytomine_predict_term is None:
+                return []
+            return [cj.parameters.cytomine_predict_term]
+
+        for image in cj.monitor(images, start=50, end=90, period=0.05, prefix="Segmenting images"):
+            wsi = CytomineSlide(image.id, zoom_level=cj.parameters.zoom_level)
             results = workflow.process(wsi)
-            annotations.extend([r.polygon for r in results if area_checker.check(r.polygon)])
+            annotations.extend([
+                Annotation(location=r.polygon.wkt, id_terms=get_term(r.label))
+                for r in results if area_checker.check(r.polygon)
+            ])
 
         annotations.save()
 

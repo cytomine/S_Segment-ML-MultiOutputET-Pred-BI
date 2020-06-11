@@ -1,5 +1,5 @@
 {
-  "command-line": "python run.py CYTOMINE_HOST CYTOMINE_PUBLIC_KEY CYTOMINE_PRIVATE_KEY CYTOMINE_ID_PROJECT CYTOMINE_ID_SOFTWARE CYTOMINE_ID_IMAGES CYTOMINE_PREDICT_TERM CYTOMINE_ZOOM_LEVEL CYTOMINE_TILE_SIZE CYTOMINE_TILE_OVERLAP CYTOMINE_ROI_TERM UNION_ENABLED MIN_ANNOTATION_AREA MAX_ANNOTATION_AREA TILE_FILTER_MIN_STDDEV TILE_FILTER_MAX_MEAN CYTOMINE_ID_JOB PYXIT_PREDICTION_STEP",
+  "command-line": "python run.py CYTOMINE_HOST CYTOMINE_PUBLIC_KEY CYTOMINE_PRIVATE_KEY CYTOMINE_ID_PROJECT CYTOMINE_ID_SOFTWARE CYTOMINE_ID_IMAGES CYTOMINE_PREDICT_TERM CYTOMINE_ZOOM_LEVEL CYTOMINE_TILE_SIZE CYTOMINE_TILE_OVERLAP CYTOMINE_ROI_TERM N_JOBS UNION_ENABLED MIN_ANNOTATION_AREA MAX_ANNOTATION_AREA TILE_FILTER_MIN_STDDEV TILE_FILTER_MAX_MEAN CYTOMINE_ID_JOB PYXIT_PREDICTION_STEP",
   "inputs": [
     {
       "name": "Cytomine host",
@@ -65,10 +65,10 @@
     },
     {
       "name": "Cytomine predict term identifier",
-      "description": "Identifier of the term to associate with the annotations of the segmented elements.",
+      "description": "Identifier of a term to associate with the annotations of the segmented elements if the trained model was trained in binary. If the parameter is not provided, the uploaded annotations will not be associated a term. In case of multiclass training (i.e. not binary), this parameter is ignored.",
       "set-by-server": false,
       "value-key": "@ID",
-      "optional": false,
+      "optional": true,
       "id": "cytomine_predict_term",
       "type": "Domain",
       "uri": "/api/project/$currentProject$/term.json",
@@ -77,7 +77,7 @@
     },
     {
       "name": "Zoom level",
-      "description": "The zoom level to apply when fetching the tiles (0 for maximum resolution)",
+      "description": "The zoom level to apply when fetching the tiles (0 for maximum resolution). If zoom_level > 0, tile size and overlap should be respectively set to 256 and 0 (IIP protocol).",
       "set-by-server": false,
       "value-key": "@ID",
       "default-value": 0,
@@ -118,6 +118,17 @@
       "type": "Domain",
       "uri": "/api/project/$currentProject$/term.json",
       "uri-print-attribute": "name",
+      "command-line-flag": "--@id"
+    },
+    {
+      "default-value": 1,
+      "name": "Number of jobs",
+      "description": "Number of jobs for training",
+      "set-by-server": false,
+      "value-key": "@ID",
+      "optional": true,
+      "id": "n_jobs",
+      "type": "Number",
       "command-line-flag": "--@id"
     },
     {
