@@ -79,7 +79,7 @@
       "set-by-server": false,
       "value-key": "@ID",
       "optional": true,
-      "id": "cytomine_predict_term",
+      "id": "cytomine_id_predict_term",
       "type": "Domain",
       "uri": "/api/project/$currentProject$/term.json",
       "uri-print-attribute": "name",
