@@ -1,5 +1,5 @@
 {
-  "command-line": "python run.py CYTOMINE_HOST CYTOMINE_PUBLIC_KEY CYTOMINE_PRIVATE_KEY CYTOMINE_ID_PROJECT CYTOMINE_ID_SOFTWARE CYTOMINE_ID_IMAGES CYTOMINE_PREDICT_TERM CYTOMINE_ZOOM_LEVEL CYTOMINE_TILE_SIZE CYTOMINE_TILE_OVERLAP CYTOMINE_ROI_TERM N_JOBS UNION_ENABLED MIN_ANNOTATION_AREA MAX_ANNOTATION_AREA TILE_FILTER_MIN_STDDEV TILE_FILTER_MAX_MEAN CYTOMINE_ID_JOB PYXIT_PREDICTION_STEP",
+  "command-line": "python run.py CYTOMINE_HOST CYTOMINE_PUBLIC_KEY CYTOMINE_PRIVATE_KEY CYTOMINE_ID_PROJECT CYTOMINE_ID_SOFTWARE CYTOMINE_ID_IMAGES CYTOMINE_PREDICT_TERM CYTOMINE_ZOOM_LEVEL CYTOMINE_TILE_SIZE CYTOMINE_TILE_OVERLAP CYTOMINE_ROI_ANNOTATIONS N_JOBS UNION_ENABLED MIN_ANNOTATION_AREA MAX_ANNOTATION_AREA TILE_FILTER_MIN_STDDEV TILE_FILTER_MAX_MEAN CYTOMINE_ID_JOB PYXIT_PREDICTION_STEP",
   "inputs": [
     {
       "name": "Cytomine host",
@@ -64,6 +64,16 @@
       "command-line-flag": "--@id"
     },
     {
+      "name": "Region of interest annotations",
+      "description": "Identifier of annotations containing the ROIs to process (cytomine_id_images is ignored when ROIs are provided).",
+      "set-by-server": false,
+      "value-key": "@ID",
+      "optional": true,
+      "id": "cytomine_roi_annotations",
+      "type": "ListDomain",
+      "command-line-flag": "--@id"
+    },
+    {
       "name": "Cytomine predict term identifier",
       "description": "Identifier of a term to associate with the annotations of the segmented elements if the trained model was trained in binary. If the parameter is not provided, the uploaded annotations will not be associated a term. In case of multiclass training (i.e. not binary), this parameter is ignored.",
       "set-by-server": false,
@@ -106,18 +116,6 @@
       "optional": true,
       "id": "cytomine_tile_overlap",
       "type": "Number",
-      "command-line-flag": "--@id"
-    },
-    {
-      "name": "Region of interest term identifier",
-      "description": "If a term identifier is provided, the segmentation will be executed only inside of the region of interest which are associated the given term (disabled by default, value -1).",
-      "set-by-server": false,
-      "value-key": "@ID",
-      "optional": true,
-      "id": "cytomine_roi_term",
-      "type": "Domain",
-      "uri": "/api/project/$currentProject$/term.json",
-      "uri-print-attribute": "name",
       "command-line-flag": "--@id"
     },
     {
