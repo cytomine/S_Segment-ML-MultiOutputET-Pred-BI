@@ -102,7 +102,7 @@ class ExtraTreesSegmenter(SemanticSegmenter):
         # remove classe where there is no mask
         class_map = np.take(self._pyxit.classes_, np.argmax(confidence_map, axis=2))
         class_map[np.logical_not(mask)] = self._background
-        return class_map
+        return class_map.astype(np.int32)
 
 
 class AnnotationAreaChecker(object):
@@ -180,6 +180,7 @@ def main(argv):
         # working path
         root_path = str(Path.home())
         working_path = os.path.join(root_path, "images")
+        os.makedirs(working_path, exist_ok=True)
 
         # load training information
         cj.job.update(progress=5, statusComment="Extract properties from training job.")
