@@ -186,7 +186,7 @@
     },
     {
       "name": "Training job identifier",
-      "description": "Identifier of the training job. The job should have the trained model attached (as a \"model.joblib\" attached file) and the properties \u0027binary\u0027, \u0027classes\u0027 and \u0027positive_classes\u0027.",
+      "description": "Identifier of the training job. The job should have the trained model attached (as a \"model.joblib\" attached file) and the properties \u0027binary\u0027, \u0027classes\u0027.",
       "set-by-server": false,
       "value-key": "@ID",
       "optional": false,
