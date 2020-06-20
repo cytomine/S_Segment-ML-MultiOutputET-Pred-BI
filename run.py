@@ -102,7 +102,7 @@ class ExtraTreesSegmenter(SemanticSegmenter):
         # remove classe where there is no mask
         class_map = np.take(self._pyxit.classes_, np.argmax(confidence_map, axis=2))
         class_map[np.logical_not(mask)] = self._background
-        return class_map.astype(np.int32)
+        return class_map.astype(np.uint32)
 
 
 class AnnotationAreaChecker(object):
