@@ -228,10 +228,10 @@ def main(argv):
 
         def get_term(label):
             if binary:
-                if cj.parameters.cytomine_id_predict_term is None:
+                if "cytomine_id_predict_term" not in cj.parameters:
                     return []
                 else:
-                    return [cj.parameters.cytomine_id_predict_term]
+                    return [int(cj.parameters.cytomine_id_predict_term)]
             # multi-class
             return [label]
 
