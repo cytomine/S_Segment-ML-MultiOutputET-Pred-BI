@@ -102,7 +102,7 @@ class ExtraTreesSegmenter(SemanticSegmenter):
         # remove classe where there is no mask
         class_map = np.take(self._pyxit.classes_, np.argmax(confidence_map, axis=2))
         class_map[np.logical_not(mask)] = self._background
-        return class_map.astype(np.int32)
+        return class_map
 
 
 class AnnotationAreaChecker(object):
@@ -236,7 +236,7 @@ def main(argv):
             return [label]
 
         zones = extract_images_or_rois(cj.parameters)
-        for zone in cj.monitor(zones, start=50, end=90, period=0.05, prefix="Segmenting images"):
+        for zone in cj.monitor(zones, start=50, end=90, period=0.05, prefix="Segmenting images/ROIs"):
             results = workflow.process(zone)
 
             annotations = AnnotationCollection()
