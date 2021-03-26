@@ -207,7 +207,7 @@ def main(argv):
         builder = SSLWorkflowBuilder()
         builder.set_tile_size(cj.parameters.cytomine_tile_size, cj.parameters.cytomine_tile_size)
         builder.set_overlap(cj.parameters.cytomine_tile_overlap)
-        builder.set_tile_builder(CytomineTileBuilder(working_path))
+        builder.set_tile_builder(CytomineTileBuilder(working_path, n_jobs=cj.parameters.n_jobs))
         builder.set_logger(StandardOutputLogger(level=Logger.INFO))
         builder.set_n_jobs(1)
         builder.set_background_class(0)
