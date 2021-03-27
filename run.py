@@ -111,7 +111,10 @@ class AnnotationAreaChecker(object):
         self._max_area = max_area
 
     def check(self, annot):
-        return self._min_area < annot.area < self._max_area
+        if self._max_area < 0:
+            return self._min_area < annot.area
+        else:
+            return self._min_area < annot.area < self._max_area
 
 
 def change_referential(p, height):
@@ -247,7 +250,7 @@ def main(argv):
 
         def get_term(label):
             if binary:
-                if "cytomine_id_predict_term" not in cj.parameters:
+                if "cytomine_id_predict_term" not in cj.parameters or not cj.parameters.cytomine_id_predict_term:
                     return []
                 else:
                     return [int(cj.parameters.cytomine_id_predict_term)]
