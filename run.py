@@ -8,12 +8,12 @@ from shapely import wkt
 from shapely.affinity import affine_transform
 from skimage.util.shape import view_as_windows
 
-from cytomine import CytomineJob
+from cytomine import CytomineJob, Cytomine
 from cytomine.models import ImageInstanceCollection, ImageInstance, AttachedFileCollection, Job, PropertyCollection, \
     AnnotationCollection, Annotation
 from cytomine.utilities.software import parse_domain_list, str2bool
 from sldc import SemanticSegmenter, SSLWorkflowBuilder, StandardOutputLogger, Logger, ImageWindow
-from sldc_cytomine import CytomineTileBuilder, CytomineSlide
+from sldc_cytomine import CytomineTileBuilder, CytomineSlide, CytomineDownloadableTile
 
 
 def extract_windows(image, dims, step):
@@ -168,6 +168,23 @@ def extract_images_or_rois(parameters):
     return [CytomineSlide(i, parameters.cytomine_zoom_level) for i in images]
 
 
+class CytomineOldIIPTile(CytomineDownloadableTile):
+    def download_tile_image(self):
+        slide = self.base_image
+        col_tile = self.abs_offset_x // 256
+        row_tile = self.abs_offset_y // 256
+        _slice = slide.image_instance
+        response = Cytomine.get_instance().get('imaging_server.json', None)
+        imageServerUrl = response['collection'][0]['url']
+        return Cytomine.get_instance().download_file(imageServerUrl + "/image/tile", self.cache_filepath, False, payload={
+            "zoomify": _slice.fullPath,
+            "mimeType": _slice.mime,
+            "x": col_tile,
+            "y": row_tile,
+            "z": slide.api_zoom_level
+        })
+
+
 def main(argv):
     with CytomineJob.from_cli(argv) as cj:
         # use only images from the current project
@@ -207,7 +224,7 @@ def main(argv):
         builder = SSLWorkflowBuilder()
         builder.set_tile_size(cj.parameters.cytomine_tile_size, cj.parameters.cytomine_tile_size)
         builder.set_overlap(cj.parameters.cytomine_tile_overlap)
-        builder.set_tile_builder(CytomineTileBuilder(working_path, n_jobs=cj.parameters.n_jobs))
+        builder.set_tile_builder(CytomineTileBuilder(working_path, tile_class=CytomineOldIIPTile, n_jobs=cj.parameters.n_jobs))
         builder.set_logger(StandardOutputLogger(level=Logger.INFO))
         builder.set_n_jobs(1)
         builder.set_background_class(0)
