@@ -157,7 +157,7 @@ def extract_images_or_rois(parameters):
             zones.append(window)
         return zones
 
-    # work at image level
+    # work at image level or ROIs by term
     images = ImageInstanceCollection()
     if parameters.cytomine_id_images is not None:
         id_images = parse_domain_list(parameters.cytomine_id_images)
@@ -165,7 +165,26 @@ def extract_images_or_rois(parameters):
     else:
         images = images.fetch_with_filter("project", parameters.cytomine_id_project)
 
-    return [CytomineSlide(i, parameters.cytomine_zoom_level) for i in images]
+    slides = [CytomineSlide(img, parameters.cytomine_zoom_level) for img in images]
+    if parameters.cytomine_id_roi_term is None:
+        return slides
+
+    # fetch ROI annotations
+    collection = AnnotationCollection(
+        terms=[parameters.cytomine_id_roi_term],
+        reviewed=parameters.cytomine_reviewed_roi,
+        showWKT=True
+    )
+    collection.fetch_with_filter(project=parameters.cytomine_id_project)
+    slides_map = {slide.image_instance.id: slide for slide in slides}
+    regions = list()
+    for annotation in collection:
+        if annotation.image not in slides_map:
+            continue
+        slide = slides_map[annotation.image]
+        regions.append(get_iip_window_from_annotation(slide, annotation, parameters.cytomine_zoom_level))
+
+    return regions
 
 
 class CytomineOldIIPTile(CytomineDownloadableTile):
