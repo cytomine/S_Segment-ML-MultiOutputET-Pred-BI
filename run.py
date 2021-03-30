@@ -10,10 +10,68 @@ from skimage.util.shape import view_as_windows
 
 from cytomine import CytomineJob, Cytomine
 from cytomine.models import ImageInstanceCollection, ImageInstance, AttachedFileCollection, Job, PropertyCollection, \
-    AnnotationCollection, Annotation
+    AnnotationCollection, Annotation, JobCollection
 from cytomine.utilities.software import parse_domain_list, str2bool
-from sldc import SemanticSegmenter, SSLWorkflowBuilder, StandardOutputLogger, Logger, ImageWindow
-from sldc_cytomine import CytomineTileBuilder, CytomineSlide, CytomineDownloadableTile
+from sldc import SemanticSegmenter, SSLWorkflowBuilder, StandardOutputLogger, Logger, ImageWindow, Image
+from sldc_cytomine import CytomineTileBuilder
+from sldc_cytomine.image_adapter import CytomineDownloadableTile
+
+
+class CytomineSlide(Image):
+    """
+    A slide from a cytomine project
+    """
+
+    def __init__(self, img_instance, zoom_level=0):
+        """Construct CytomineSlide objects
+
+        Parameters
+        ----------
+        img_instance: ImageInstance
+            The the image instance
+        zoom_level: int
+            The zoom level at which the slide must be read. The maximum zoom level is 0 (most zoomed in). The greater
+            the value, the lower the zoom.
+        """
+        self._img_instance = img_instance
+        self._zoom_level = zoom_level
+
+    @classmethod
+    def from_id(cls, id_img_instance, zoom_level=0):
+        return cls(ImageInstance.fetch(id_img_instance), zoom_level=zoom_level)
+
+    @property
+    def image_instance(self):
+        return self._img_instance
+
+    @property
+    def np_image(self):
+        raise NotImplementedError("Disabled due to the too heavy size of the images")
+
+    @property
+    def width(self):
+        return self._img_instance.width // (2 ** self.zoom_level)
+
+    @property
+    def height(self):
+        return self._img_instance.height // (2 ** self.zoom_level)
+
+    @property
+    def channels(self):
+        return 3
+
+    @property
+    def zoom_level(self):
+        return self._zoom_level
+
+    @property
+    def api_zoom_level(self):
+        """The zoom level used by cytomine api uses 0 as lower level of zoom (most zoomed out). This property
+        returns a zoom value that can be used to communicate with the backend."""
+        return self._img_instance.depth - self.zoom_level
+
+    def __str__(self):
+        return "CytomineSlide (#{}) ({} x {}) (zoom: {})".format(self._img_instance.id, self.width, self.height, self.zoom_level)
 
 
 def extract_windows(image, dims, step):
@@ -62,9 +120,9 @@ class ExtraTreesSegmenter(SemanticSegmenter):
 
     def segment(self, image):
         # extract mask
-        mask = np.ones(image.shape[:2], dtype=np.bool)
+        mask = np.ones(image.shape[:2], dtype="bool")
         if image.ndim == 3 and image.shape[2] == 2 or image.shape[2] == 4:
-            mask = image[:, :, -1].astype(np.bool)
+            mask = image[:, :, -1].astype("bool")
             image = np.copy(image[:, :, :-1])  # remove mask from image
 
         # skip processing if tile is supposed background (checked via mean & std) or not in the mask
@@ -86,8 +144,8 @@ class ExtraTreesSegmenter(SemanticSegmenter):
         y = np.array(self._pyxit.base_estimator.predict_proba(subwindows))
 
         cm_dims = list(image.shape[:2]) + [self._pyxit.n_classes_]
-        confidence_map = np.zeros(cm_dims, dtype=np.float)
-        pred_count_map = np.zeros(cm_dims[:2], dtype=np.int)
+        confidence_map = np.zeros(cm_dims, dtype="float")
+        pred_count_map = np.zeros(cm_dims[:2], dtype="int32")
 
         for row, w_index in enumerate(w_identifiers):
             im_width = image.shape[1]
@@ -148,7 +206,7 @@ def extract_images_or_rois(parameters):
         for id_annot in id_annotations:
             annotation = Annotation().fetch(id_annot)
             if annotation.image not in image_cache:
-                image_cache[annotation.image] = CytomineSlide(annotation.image, parameters.cytomine_zoom_level)
+                image_cache[annotation.image] = CytomineSlide(ImageInstance().fetch(annotation.image), parameters.cytomine_zoom_level)
             window = get_iip_window_from_annotation(
                 image_cache[annotation.image],
                 annotation,
@@ -169,13 +227,15 @@ def extract_images_or_rois(parameters):
     if parameters.cytomine_id_roi_term is None:
         return slides
 
-    # fetch ROI annotations
+    # fetch ROI annotations, all users
     collection = AnnotationCollection(
         terms=[parameters.cytomine_id_roi_term],
         reviewed=parameters.cytomine_reviewed_roi,
-        showWKT=True
-    )
-    collection.fetch_with_filter(project=parameters.cytomine_id_project)
+        project=parameters.cytomine_id_project,
+        showWKT=True,
+        includeAlgo=True
+    ).fetch()
+
     slides_map = {slide.image_instance.id: slide for slide in slides}
     regions = list()
     for annotation in collection:
