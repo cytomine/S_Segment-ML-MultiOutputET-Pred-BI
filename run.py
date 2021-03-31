@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pyxit.estimator import COLORSPACE_RGB, COLORSPACE_TRGB, COLORSPACE_HSV, COLORSPACE_GRAY, _raw_to_trgb, _raw_to_hsv
 from shapely import wkt
-from shapely.affinity import affine_transform
+from shapely.affinity import affine_transform, translate
 from skimage.util.shape import view_as_windows
 
 from cytomine import CytomineJob, Cytomine
@@ -334,9 +334,15 @@ def main(argv):
             # multi-class
             return [label]
 
+        zoom_mult = (2 ** cj.parameters.cytomine_zoom_level)
         zones = extract_images_or_rois(cj.parameters)
         for zone in cj.monitor(zones, start=50, end=90, period=0.05, prefix="Segmenting images/ROIs"):
             results = workflow.process(zone)
+
+            if cj.parameters.cytomine_id_roi_term is not None:
+                ROI = change_referential(translate(zone.polygon_mask, zone.offset[0], zone.offset[1]), zone.base_image.height)
+                if cj.parameters.cytomine_zoom_level > 0:
+                    ROI = affine_transform(ROI, [zoom_mult, 0, 0, zoom_mult, 0, 0])
 
             annotations = AnnotationCollection()
             for obj in results:
@@ -345,16 +351,23 @@ def main(argv):
                 polygon = obj.polygon
                 if isinstance(zone, ImageWindow):
                     polygon = affine_transform(polygon, [1, 0, 0, 1, zone.abs_offset_x, zone.abs_offset_y])
+
+
                 polygon = change_referential(polygon, zone.base_image.height)
                 if cj.parameters.cytomine_zoom_level > 0:
-                    zoom_mult = (2 ** cj.parameters.cytomine_zoom_level)
                     polygon = affine_transform(polygon, [zoom_mult, 0, 0, zoom_mult, 0, 0])
-                annotations.append(Annotation(
-                    location=polygon.wkt,
-                    id_terms=get_term(obj.label),
-                    id_project=cj.project.id,
-                    id_image=zone.base_image.image_instance.id
-                ))
+
+
+                if cj.parameters.cytomine_id_roi_term is not None:
+                    polygon = polygon.intersection(ROI)
+
+                if not polygon.is_empty:
+                    annotations.append(Annotation(
+                        location=polygon.wkt,
+                        id_terms=get_term(obj.label),
+                        id_project=cj.project.id,
+                        id_image=zone.base_image.image_instance.id
+                    ))
             annotations.save()
 
         cj.job.update(status=Job.TERMINATED, status_comment="Finish", progress=100)
