@@ -183,7 +183,7 @@ def get_iip_window_from_annotation(slide, annotation, zoom_level):
     """generate a iip-compatible roi based on an annotation at the given zoom level"""
     roi_polygon = change_referential(wkt.loads(annotation.location), slide.image_instance.height)
     if zoom_level == 0:
-        return slide.window_from_polygon(roi_polygon)
+        return slide.window_from_polygon(roi_polygon, mask=True)
     # recompute the roi so that it matches the iip tile topology
     zoom_ratio = 1 / (2 ** zoom_level)
     scaled_roi = affine_transform(roi_polygon, [zoom_ratio, 0, 0, zoom_ratio, 0, 0])
