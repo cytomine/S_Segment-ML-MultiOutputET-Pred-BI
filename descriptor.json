@@ -1,5 +1,5 @@
 {
-  "command-line": "python run.py CYTOMINE_HOST CYTOMINE_PUBLIC_KEY CYTOMINE_PRIVATE_KEY CYTOMINE_ID_PROJECT CYTOMINE_ID_SOFTWARE CYTOMINE_ID_IMAGES CYTOMINE_ID_ROI_TERM CYTOMINE_REVIEWED_ROI CYTOMINE_ZOOM_LEVEL CYTOMINE_TILE_SIZE CYTOMINE_TILE_OVERLAP CYTOMINE_ROI_ANNOTATIONS N_JOBS UNION_ENABLED MIN_ANNOTATION_AREA MAX_ANNOTATION_AREA TILE_FILTER_MIN_STDDEV TILE_FILTER_MAX_MEAN CYTOMINE_ID_JOB PYXIT_PREDICTION_STEP CYTOMINE_ID_PREDICT_TERM",
+  "command-line": "python run.py CYTOMINE_HOST CYTOMINE_PUBLIC_KEY CYTOMINE_PRIVATE_KEY CYTOMINE_ID_PROJECT CYTOMINE_ID_SOFTWARE CYTOMINE_ID_IMAGES CYTOMINE_ID_ROI_TERM CYTOMINE_REVIEWED_ROI CYTOMINE_ZOOM_LEVEL CYTOMINE_TILE_SIZE CYTOMINE_TILE_OVERLAP N_JOBS UNION_ENABLED MIN_ANNOTATION_AREA MAX_ANNOTATION_AREA TILE_FILTER_MIN_STDDEV TILE_FILTER_MAX_MEAN CYTOMINE_ID_JOB PYXIT_PREDICTION_STEP CYTOMINE_ID_PREDICT_TERM",
   "inputs": [
     {
       "name": "Cytomine host",
@@ -84,16 +84,6 @@
       "default-value": false,
       "id": "cytomine_reviewed_roi",
       "type": "Boolean",
-      "command-line-flag": "--@id"
-    },
-    {
-      "name": "Region of interest annotations",
-      "description": "Identifier of annotations containing the ROIs to process (cytomine_id_images, cytomine_id_roi_term and cytomine_reviewed_roi are ignored when ROIs are provided).",
-      "set-by-server": false,
-      "value-key": "@ID",
-      "optional": true,
-      "id": "cytomine_roi_annotations",
-      "type": "ListDomain",
       "command-line-flag": "--@id"
     },
     {

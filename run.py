@@ -198,23 +198,6 @@ def get_iip_window_from_annotation(slide, annotation, zoom_level):
 
 
 def extract_images_or_rois(parameters):
-    id_annotations = parse_domain_list(parameters.cytomine_roi_annotations)
-    # if ROI annotations are provided
-    if len(id_annotations) > 0:
-        image_cache = dict()  # maps ImageInstance id with CytomineSlide object
-        zones = list()
-        for id_annot in id_annotations:
-            annotation = Annotation().fetch(id_annot)
-            if annotation.image not in image_cache:
-                image_cache[annotation.image] = CytomineSlide(ImageInstance().fetch(annotation.image), parameters.cytomine_zoom_level)
-            window = get_iip_window_from_annotation(
-                image_cache[annotation.image],
-                annotation,
-                parameters.cytomine_zoom_level
-            )
-            zones.append(window)
-        return zones
-
     # work at image level or ROIs by term
     images = ImageInstanceCollection()
     if parameters.cytomine_id_images is not None:
@@ -368,7 +351,26 @@ def main(argv):
                         id_project=cj.project.id,
                         id_image=zone.base_image.image_instance.id
                     ))
-            annotations.save()
+                    
+            # Some annotations found thanks to the algorithm are Geometry Collections,
+            # containing more than one element -> keep only polygons
+            annotations_ok = AnnotationCollection()
+            for annotation in annotations:
+                if isinstance(shapely.wkt.loads(annotation.location), shapely.geometry.collection.GeometryCollection):
+                    for geom in shapely.wkt.loads(annotation.location):
+                        if isinstance(geom, shapely.geometry.Polygon):
+                            annotations_ok.append(Annotation(
+                                location=geom.wkt,
+                                id_terms=annotation.term,
+                                id_project=annotation.project,
+                                id_image=annotation.image
+                            ))
+                elif isinstance(shapely.wkt.loads(annotation.location), shapely.geometry.Polygon):
+                    annotations_ok.append(annotation)
+                else:
+                    continue
+                    
+            annotations_ok.save()
 
         cj.job.update(status=Job.TERMINATED, status_comment="Finish", progress=100)
 
