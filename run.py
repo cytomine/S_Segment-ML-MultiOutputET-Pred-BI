@@ -4,6 +4,7 @@ import numpy as np
 from pathlib import Path
 
 from pyxit.estimator import COLORSPACE_RGB, COLORSPACE_TRGB, COLORSPACE_HSV, COLORSPACE_GRAY, _raw_to_trgb, _raw_to_hsv
+import shapely
 from shapely import wkt
 from shapely.affinity import affine_transform, translate
 from skimage.util.shape import view_as_windows
