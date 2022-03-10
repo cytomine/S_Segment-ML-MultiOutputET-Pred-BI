@@ -165,15 +165,16 @@ class ExtraTreesSegmenter(SemanticSegmenter):
 
 
 class AnnotationAreaChecker(object):
-    def __init__(self, min_area, max_area):
+    def __init__(self, min_area, max_area, level):
         self._min_area = min_area
         self._max_area = max_area
+        self._level = level
 
     def check(self, annot):
         if self._max_area < 0:
-            return self._min_area < annot.area
+            return self._min_area < annot.area * (2**self._level)
         else:
-            return self._min_area < annot.area < self._max_area
+            return self._min_area < (annot.area * (2**self._level)) < self._max_area
 
 
 def change_referential(p, height):
@@ -306,7 +307,8 @@ def main(argv):
 
         area_checker = AnnotationAreaChecker(
             min_area=cj.parameters.min_annotation_area,
-            max_area=cj.parameters.max_annotation_area
+            max_area=cj.parameters.max_annotation_area,
+            level=cj.parameters.cytomine_zoom_level
         )
 
         def get_term(label):
@@ -352,9 +354,11 @@ def main(argv):
                         id_project=cj.project.id,
                         id_image=zone.base_image.image_instance.id
                     ))
-                    
-            # Some annotations found thanks to the algorithm are Geometry Collections,
-            # containing more than one element -> keep only polygons
+            """        
+            Some annotations found thanks to the algorithm are Geometry Collections,
+            containing more than one element -> keep only polygons from those 
+            GeometryCollections
+            """
             annotations_ok = AnnotationCollection()
             for annotation in annotations:
                 if isinstance(shapely.wkt.loads(annotation.location), shapely.geometry.collection.GeometryCollection):
