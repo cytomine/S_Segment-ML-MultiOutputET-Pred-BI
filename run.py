@@ -11,9 +11,9 @@ from skimage.util.shape import view_as_windows
 
 from cytomine import CytomineJob, Cytomine
 from cytomine.models import ImageInstanceCollection, ImageInstance, AttachedFileCollection, Job, PropertyCollection, \
-    AnnotationCollection, Annotation, JobCollection
+    AnnotationCollection, Annotation
 from cytomine.utilities.software import parse_domain_list, str2bool
-from sldc import SemanticSegmenter, SSLWorkflowBuilder, StandardOutputLogger, Logger, ImageWindow, Image
+from sldc import SemanticSegmenter, SSLWorkflowBuilder, StandardOutputLogger, Logger, ImageWindow, Image, TileTopology
 from sldc_cytomine import CytomineTileBuilder
 from sldc_cytomine.image_adapter import CytomineDownloadableTile
 
@@ -85,6 +85,25 @@ def extract_windows(image, dims, step):
     identifiers = view_as_windows(window_ids, dims[:2], step=step)
     identifiers = identifiers[:, :, 0, 0].reshape([-1])
     return subwindows, identifiers
+
+
+def count_pred_per_pixel(step, sw_height, sw_width):
+	return TileTopology.tile_count_1d(sw_height, step) * TileTopology.tile_count_1d(sw_width, step)
+
+
+def determine_best_step(target_pred_per_pxl, sw_height, sw_width):
+	"""Determine the best prediction step for a given number of requested predictions per pixel.
+	Take the largest step that generates the requested number of predictions per pixel (or slightly more if no exact match).
+	"""
+	prev_step = None
+	# look for best step
+	for step in np.arange(1, min(sw_height, sw_width) + 1): 
+		pred_per_pxl = count_pred_per_pixel(step, sw_height, sw_width)
+		if pred_per_pxl < target_pred_per_pxl:
+			return prev_step
+		prev_step = step
+
+	return prev_step
 
 
 class ExtraTreesSegmenter(SemanticSegmenter):
@@ -295,10 +314,18 @@ def main(argv):
         # value 0 will prevent merging but still requires to run the merging check
         # procedure (inefficient)
         builder.set_distance_tolerance(2 if cj.parameters.union_enabled else 0)
+
+        # determine prediction step
+        pyxit_prediction_step = determine_best_step(
+            cj.parameters.pyxit_predictions_per_pixel, 
+            pyxit.target_height, 
+            pyxit.target_width
+        )
+
         builder.set_segmenter(ExtraTreesSegmenter(
             pyxit=pyxit,
             classes=classes,
-            prediction_step=cj.parameters.pyxit_prediction_step,
+            prediction_step=pyxit_prediction_step,
             background=0,
             min_std=cj.parameters.tile_filter_min_stddev,
             max_mean=cj.parameters.tile_filter_max_mean

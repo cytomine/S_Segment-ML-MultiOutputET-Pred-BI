@@ -1,5 +1,5 @@
 {
-  "command-line": "python run.py CYTOMINE_HOST CYTOMINE_PUBLIC_KEY CYTOMINE_PRIVATE_KEY CYTOMINE_ID_PROJECT CYTOMINE_ID_SOFTWARE CYTOMINE_ID_IMAGES CYTOMINE_ID_ROI_TERM CYTOMINE_REVIEWED_ROI CYTOMINE_ZOOM_LEVEL CYTOMINE_TILE_SIZE CYTOMINE_TILE_OVERLAP N_JOBS UNION_ENABLED MIN_ANNOTATION_AREA MAX_ANNOTATION_AREA TILE_FILTER_MIN_STDDEV TILE_FILTER_MAX_MEAN CYTOMINE_ID_JOB PYXIT_PREDICTION_STEP CYTOMINE_ID_PREDICT_TERM",
+  "command-line": "python run.py CYTOMINE_HOST CYTOMINE_PUBLIC_KEY CYTOMINE_PRIVATE_KEY CYTOMINE_ID_PROJECT CYTOMINE_ID_SOFTWARE CYTOMINE_ID_IMAGES CYTOMINE_ID_ROI_TERM CYTOMINE_REVIEWED_ROI CYTOMINE_ZOOM_LEVEL CYTOMINE_TILE_SIZE CYTOMINE_TILE_OVERLAP N_JOBS UNION_ENABLED MIN_ANNOTATION_AREA MAX_ANNOTATION_AREA TILE_FILTER_MIN_STDDEV TILE_FILTER_MAX_MEAN CYTOMINE_ID_JOB PYXIT_PREDICTIONS_PER_PIXEL CYTOMINE_ID_PREDICT_TERM",
   "inputs": [
     {
       "name": "Cytomine host",
@@ -211,13 +211,13 @@
       "command-line-flag": "--@id"
     },
     {
-      "name": "Prediction step",
-      "description": "Number of pixel to skip for each prediction. By default all pixels get a prediction (value 1)",
+      "name": "Number of predictions per pixel",
+      "description": "Number of predictions to average to get the label for one pixel. This value does not reflect the actual number of predictions for all pixels, although for most pixels it should be fairly close. The algorithm should be more accurate but slower with higher values. Lower values should have the opposite effect.",
       "set-by-server": false,
       "value-key": "@ID",
-      "default-value": 1,
+      "default-value": 8,
       "optional": true,
-      "id": "pyxit_prediction_step",
+      "id": "pyxit_predictions_per_pixel",
       "type": "Number",
       "command-line-flag": "--@id"
     }
