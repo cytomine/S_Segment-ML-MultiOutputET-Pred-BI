@@ -167,7 +167,7 @@ class ExtraTreesSegmenter(SemanticSegmenter):
         # average over multiple predictions
         confidence_map /= np.expand_dims(pred_count_map, axis=2)
 
-        # remove classe where there is no mask
+        # remove class where there is no mask
         class_map = np.take(self._pyxit.classes_, np.argmax(confidence_map, axis=2))
         class_map[np.logical_not(mask)] = self._background
         return class_map
@@ -189,6 +189,16 @@ class AnnotationAreaChecker(object):
             return min_area < (annot.area * zoom_area_coef) < max_area
 
 
+def validate_train_job(job: Job, properties: dict):
+    """Check whether the selected training job is valid."""
+    if job.status != Job.SUCCESS:
+        raise ValueError(f"training job {job.id} has not successfully terminated its execution")
+    if "binary" not in properties:
+        raise ValueError(f"job {job.id} is missing the 'binary' property, maybe it is not a training job ?")
+    if "classes" not in properties:
+        raise ValueError(f"job {job.id} is missing the 'classes' property, maybe it is not a training job ?")
+
+
 def main(argv):
     with CytomineJob.from_cli(argv) as cj:
         import warnings
@@ -202,7 +212,10 @@ def main(argv):
         # load training information
         cj.job.update(progress=5, statusComment="Extract properties from training job.")
         train_job = Job().fetch(cj.parameters.cytomine_id_job)
+        if not train_job:
+          raise ValueError(f"cannot retrieve training job {cj.parameters.cytomine_id_job}")
         properties = PropertyCollection(train_job).fetch().as_dict()
+        validate_train_job(train_job, properties)
         binary = str2bool(properties["binary"].value)
         classes = parse_domain_list(properties["classes"].value)
 
