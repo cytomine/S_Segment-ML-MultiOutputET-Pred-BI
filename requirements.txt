@@ -3,5 +3,5 @@ joblib==1.2.0
 pyxit==1.1.5
 scikit-image==0.17.2
 scikit-learn==1.1.3
-sldc-cytomine==2.1.0
+sldc-cytomine==2.1.1
 sldc==1.4.2
