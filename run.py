@@ -1,90 +1,62 @@
 import os
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import warnings
+
 import joblib
 import numpy as np
-from pathlib import Path
-
-from pyxit.estimator import COLORSPACE_RGB, COLORSPACE_TRGB, COLORSPACE_HSV, COLORSPACE_GRAY, _raw_to_trgb, _raw_to_hsv
-import shapely
-from shapely import wkt
-from shapely.affinity import affine_transform, translate
-from skimage.util.shape import view_as_windows
-
-from cytomine import CytomineJob, Cytomine
-from cytomine.models import ImageInstanceCollection, ImageInstance, AttachedFileCollection, Job, PropertyCollection, \
-    AnnotationCollection, Annotation
+import pyxit
+from cytomine import CytomineJob
+from cytomine.models import (Annotation, AnnotationCollection,
+                             AttachedFileCollection, ImageInstance,
+                             ImageInstanceCollection, Job, PropertyCollection)
 from cytomine.utilities.software import parse_domain_list, str2bool
-from sldc import SemanticSegmenter, SSLWorkflowBuilder, StandardOutputLogger, Logger, ImageWindow, Image, TileTopology
+from shapely import wkt
+from shapely.affinity import affine_transform
+from shapely.geometry import GeometryCollection, Polygon
+from skimage.color import rgb2gray, rgb2hsv
+from skimage.util.shape import view_as_windows
+from sldc.locator import flatten_geoms
+from sldc import (Logger, SemanticSegmenter, SSLWorkflowBuilder,
+                  StandardOutputLogger, TileBuilder, TileTopology)
 from sldc_cytomine import CytomineTileBuilder
-from sldc_cytomine.image_adapter import CytomineDownloadableTile
+from sldc_cytomine.dump import dump_region
+from sldc_cytomine.autodetect import infer_protocols
 
 
-class CytomineSlide(Image):
-    """
-    A slide from a cytomine project
-    """
-
-    def __init__(self, img_instance, zoom_level=0):
-        """Construct CytomineSlide objects
-
-        Parameters
-        ----------
-        img_instance: ImageInstance
-            The the image instance
-        zoom_level: int
-            The zoom level at which the slide must be read. The maximum zoom level is 0 (most zoomed in). The greater
-            the value, the lower the zoom.
-        """
-        self._img_instance = img_instance
-        self._zoom_level = zoom_level
-
-    @classmethod
-    def from_id(cls, id_img_instance, zoom_level=0):
-        return cls(ImageInstance.fetch(id_img_instance), zoom_level=zoom_level)
-
-    @property
-    def image_instance(self):
-        return self._img_instance
-
-    @property
-    def np_image(self):
-        raise NotImplementedError("Disabled due to the too heavy size of the images")
-
-    @property
-    def width(self):
-        return self._img_instance.width // (2 ** self.zoom_level)
-
-    @property
-    def height(self):
-        return self._img_instance.height // (2 ** self.zoom_level)
-
-    @property
-    def channels(self):
-        return 3
-
-    @property
-    def zoom_level(self):
-        return self._zoom_level
-
-    @property
-    def api_zoom_level(self):
-        """The zoom level used by cytomine api uses 0 as lower level of zoom (most zoomed out). This property
-        returns a zoom value that can be used to communicate with the backend."""
-        return self._img_instance.depth - self.zoom_level
-
-    def __str__(self):
-        return "CytomineSlide (#{}) ({} x {}) (zoom: {})".format(self._img_instance.id, self.width, self.height, self.zoom_level)
+def extract_windows_and_identifiers(image, identifiers, dims, step):
+    window_n_pixels = np.product(dims)
+    subwindows = view_as_windows(image, dims, step=step)
+    subwindows = subwindows.reshape([-1, window_n_pixels])
+    window_ids = view_as_windows(identifiers, dims[:2], step=step)
+    return subwindows, window_ids[:, :, 0, 0].reshape([-1])
 
 
 def extract_windows(image, dims, step):
-    # subwindows on input image
-    subwindows = view_as_windows(image, dims, step=step)
-    subwindows = subwindows.reshape([-1, np.product(dims)])
-    # generate tile identifierss
+    """Return a set of windows over the image where all pixels are covered at least once"""
     n_pixels = int(np.prod(image.shape[:2]))
-    window_ids = np.arange(n_pixels).reshape(image.shape[:2])
-    identifiers = view_as_windows(window_ids, dims[:2], step=step)
-    identifiers = identifiers[:, :, 0, 0].reshape([-1])
-    return subwindows, identifiers
+    identifiers = np.arange(n_pixels).reshape(image.shape[:2])
+    subwindows, subwindows_ids = extract_windows_and_identifiers(image, identifiers, dims, step)
+
+    # add missing windows
+    fits_horizontally = (image.shape[1] - (dims[1] - step)) % step == 0 
+    fits_vertically = (image.shape[0] - (dims[0] - step)) % step == 0
+    y_start, x_start  = -dims[0], -dims[1]
+    if not fits_horizontally:
+        w_right, id_right = extract_windows_and_identifiers(image[:, x_start:], identifiers[:, x_start:], dims, step)
+        subwindows = np.vstack([subwindows, w_right])
+        subwindows_ids = np.hstack([subwindows_ids, id_right])
+    if not fits_vertically:
+        w_bottom, id_bottom = extract_windows_and_identifiers(image[y_start:], identifiers[y_start:], dims, step)
+        subwindows = np.vstack([subwindows, w_bottom])
+        subwindows_ids = np.hstack([subwindows_ids, id_bottom])
+    if not (fits_horizontally or fits_vertically): 
+        w_bottom_right = np.array([image[y_start:, x_start:].flatten()])
+        id_bottom_right = np.array([identifiers[y_start, x_start]])
+        subwindows = np.vstack([subwindows, w_bottom_right])
+        subwindows_ids = np.hstack([subwindows_ids, id_bottom_right])
+
+    return subwindows, subwindows_ids
 
 
 def count_pred_per_pixel(step, sw_height, sw_width):
@@ -104,6 +76,27 @@ def determine_best_step(target_pred_per_pxl, sw_height, sw_width):
 		prev_step = step
 
 	return prev_step
+
+
+def change_referential(p, offset=None, zoom_level=0, height=None):
+  """
+  Parameters
+  ----------
+  p: Polygon
+    A shapely polygon
+  offset: tuple
+    (x, y) an offest to apply to the polygon
+  height: int
+    The height of the region containing the polygon (post-offset) 
+  zoom_level: float
+    Scale factor (exponent)
+  """
+  if offset is not None:
+    p = affine_transform(p, [1, 0, 0, 1, -offset[0], -offset[1]])
+  if height is not None:
+    p = affine_transform(p, [1, 0, 0, -1, 0, height])
+  p = affine_transform(p, [1 / 2 ** zoom_level, 0, 0, 1 / 2 ** zoom_level, 0, 0])
+  return p
 
 
 class ExtraTreesSegmenter(SemanticSegmenter):
@@ -126,17 +119,14 @@ class ExtraTreesSegmenter(SemanticSegmenter):
 
     def _convert_colorspace(self, image):
         colorspace = self._pyxit.colorspace
-        flattened = image.reshape([-1] if image.ndim == 2 else [-1, image.shape[2]])
-        if colorspace == COLORSPACE_RGB:
+        if colorspace == pyxit.estimator.COLORSPACE_GRAY:
+            return rgb2gray(image)
+        elif colorspace == pyxit.estimator.COLORSPACE_RGB:
             return image
-        elif colorspace == COLORSPACE_TRGB:
-            return _raw_to_trgb(flattened).reshape(image.shape)
-        elif colorspace == COLORSPACE_HSV:
-            return _raw_to_hsv(flattened).reshape(image.shape)
-        elif colorspace == COLORSPACE_GRAY:
-            return _raw_to_hsv(flattened).reshape(image.shape[:2])
+        elif colorspace == pyxit.estimator.COLORSPACE_HSV:
+            return rgb2hsv(image)
         else:
-            raise ValueError("unknown colorspace code '{}'".format(colorspace))
+            raise ValueError("unsupported color space use HSV, Gray or RGB")
 
     def segment(self, image):
         # extract mask
@@ -190,97 +180,21 @@ class AnnotationAreaChecker(object):
         self._level = level
 
     def check(self, annot):
-        if self._max_area < 0:
-            return self._min_area < annot.area * (2**self._level)
+        zoom_area_coef = 2 ** (2 * self._level)
+        min_area = self._min_area / zoom_area_coef
+        max_area = self._max_area / zoom_area_coef
+        if max_area < 0:
+            return min_area < annot.area * zoom_area_coef
         else:
-            return self._min_area < (annot.area * (2**self._level)) < self._max_area
-
-
-def change_referential(p, height):
-    return affine_transform(p, [1, 0, 0, -1, 0, height])
-
-
-def get_iip_window_from_annotation(slide, annotation, zoom_level):
-    """generate a iip-compatible roi based on an annotation at the given zoom level"""
-    roi_polygon = change_referential(wkt.loads(annotation.location), slide.image_instance.height)
-    if zoom_level == 0:
-        return slide.window_from_polygon(roi_polygon, mask=True)
-    # recompute the roi so that it matches the iip tile topology
-    zoom_ratio = 1 / (2 ** zoom_level)
-    scaled_roi = affine_transform(roi_polygon, [zoom_ratio, 0, 0, zoom_ratio, 0, 0])
-    min_x, min_y, max_x, max_y = (int(v) for v in scaled_roi.bounds)
-    diff_min_x, diff_min_y = min_x % 256, min_y % 256
-    diff_max_x, diff_max_y = max_x % 256, max_y % 256
-    min_x -= diff_min_x
-    min_y -= diff_min_y
-    max_x = min(slide.width, max_x + 256 - diff_max_x)
-    max_y = min(slide.height, max_y + 256 - diff_max_y)
-    return slide.window((min_x, min_y), max_x - min_x, max_y - min_y, scaled_roi)
-
-
-def extract_images_or_rois(parameters):
-    # work at image level or ROIs by term
-    images = ImageInstanceCollection()
-    if parameters.cytomine_id_images is not None:
-        id_images = parse_domain_list(parameters.cytomine_id_images)
-        images.extend([ImageInstance().fetch(_id) for _id in id_images])
-    else:
-        images = images.fetch_with_filter("project", parameters.cytomine_id_project)
-
-    slides = [CytomineSlide(img, parameters.cytomine_zoom_level) for img in images]
-    if parameters.cytomine_id_roi_term is None:
-        return slides
-
-    # fetch ROI annotations, all users
-    collection = AnnotationCollection(
-        terms=[parameters.cytomine_id_roi_term],
-        reviewed=parameters.cytomine_reviewed_roi,
-        project=parameters.cytomine_id_project,
-        showWKT=True,
-        includeAlgo=True
-    ).fetch()
-
-    slides_map = {slide.image_instance.id: slide for slide in slides}
-    regions = list()
-    for annotation in collection:
-        if annotation.image not in slides_map:
-            continue
-        slide = slides_map[annotation.image]
-        regions.append(get_iip_window_from_annotation(slide, annotation, parameters.cytomine_zoom_level))
-
-    return regions
-
-
-class CytomineOldIIPTile(CytomineDownloadableTile):
-    def download_tile_image(self):
-        slide = self.base_image
-        col_tile = self.abs_offset_x // 256
-        row_tile = self.abs_offset_y // 256
-        _slice = slide.image_instance
-        response = Cytomine.get_instance().get('imaging_server.json', None)
-        imageServerUrl = response['collection'][0]['url']
-        return Cytomine.get_instance().download_file(imageServerUrl + "/image/tile", self.cache_filepath, False, payload={
-            "zoomify": _slice.fullPath,
-            "mimeType": _slice.mime,
-            "x": col_tile,
-            "y": row_tile,
-            "z": slide.api_zoom_level
-        })
+            return min_area < (annot.area * zoom_area_coef) < max_area
 
 
 def main(argv):
     with CytomineJob.from_cli(argv) as cj:
+        import warnings
+        warnings.filterwarnings("error", category=RuntimeWarning)
         # use only images from the current project
-        cj.job.update(progress=1, statusComment="Preparing execution")
-
-        # extract images to process
-        if cj.parameters.cytomine_zoom_level > 0 and (cj.parameters.cytomine_tile_size != 256 or cj.parameters.cytomine_tile_overlap != 0):
-            raise ValueError("when using zoom_level > 0, tile size should be 256 "
-                             "(given {}) and overlap should be 0 (given {})".format(
-                cj.parameters.cytomine_tile_size, cj.parameters.cytomine_tile_overlap))
-
         cj.job.update(progress=1, statusComment="Preparing execution (creating folders,...).")
-        # working path
         root_path = str(Path.home())
         working_path = os.path.join(root_path, "images")
         os.makedirs(working_path, exist_ok=True)
@@ -303,17 +217,50 @@ def main(argv):
         pyxit.base_estimator.n_jobs = cj.parameters.n_jobs
         pyxit.n_jobs = cj.parameters.n_jobs
 
+        cj.job.update(progress=25, statusComment="Identify regions to process.")
+        images = ImageInstanceCollection()
+        if cj.parameters.cytomine_id_images is not None:
+            id_images = parse_domain_list(cj.parameters.cytomine_id_images)
+            images.extend([ImageInstance().fetch(_id) for _id in id_images])
+        else:
+            images = images.fetch_with_filter("project", cj.project.id)
+        
+        if len(images) == 0:
+            raise ValueError("no image found for processing")
+
+        # so that the software works with different Cytomine core & ims versions
+        sldc_slide_class, sldc_tile_class = infer_protocols(images[0])
+        zoom_level = cj.parameters.cytomine_zoom_level
+        sldc_slides = [sldc_slide_class(img, zoom_level) for img in images]
+        sldc_slides_map = {slide.image_instance.id: slide for slide in sldc_slides}
+
+        # fetch ROI annotations, all users and algo
+        rois_fetch_params = { "terms": [cj.parameters.cytomine_id_roi_term], "project": cj.project.id, "showWKT": True }
+        rois_user = AnnotationCollection(**rois_fetch_params).fetch()
+        rois_algo = AnnotationCollection(**rois_fetch_params, includeAlgo=True).fetch()
+        rois = rois_user + rois_algo
+
+        regions = list()
+        for roi in rois:
+            if roi.image not in sldc_slides_map:
+                continue
+            slide = sldc_slides_map[roi.image]
+            roi_polygon = change_referential(wkt.loads(roi.location), zoom_level=zoom_level, height=slide.image_instance.height)
+            regions.append(slide.window_from_polygon(roi_polygon, mask=True))
+
+        if len(regions) == 0:
+            raise ValueError(f"no regions found with ROI term identifier {cj.parameters.cytomine_id_roi_term}")
+
         cj.job.update(progress=45, statusComment="Build workflow.")
         builder = SSLWorkflowBuilder()
         builder.set_tile_size(cj.parameters.cytomine_tile_size, cj.parameters.cytomine_tile_size)
         builder.set_overlap(cj.parameters.cytomine_tile_overlap)
-        builder.set_tile_builder(CytomineTileBuilder(working_path, tile_class=CytomineOldIIPTile, n_jobs=cj.parameters.n_jobs))
+        tile_builder = CytomineTileBuilder(working_path, tile_class=sldc_tile_class, n_jobs=1)
+        builder.set_tile_builder(tile_builder)
         builder.set_logger(StandardOutputLogger(level=Logger.INFO))
-        builder.set_n_jobs(1)
+        builder.set_n_jobs(joblib.cpu_count() if cj.parameters.n_jobs < 0 else max(1, cj.parameters.n_jobs))
         builder.set_background_class(0)
-        # value 0 will prevent merging but still requires to run the merging check
-        # procedure (inefficient)
-        builder.set_distance_tolerance(2 if cj.parameters.union_enabled else 0)
+        builder.set_distance_tolerance(1) # only merge overlapping polygons  
 
         # determine prediction step
         pyxit_prediction_step = determine_best_step(
@@ -332,12 +279,14 @@ def main(argv):
         ))
         workflow = builder.get()
 
+        min_area = cj.parameters.min_annotation_area 
+        max_area = cj.parameters.max_annotation_area
         area_checker = AnnotationAreaChecker(
-            min_area=cj.parameters.min_annotation_area,
-            max_area=cj.parameters.max_annotation_area,
-            level=cj.parameters.cytomine_zoom_level
+            min_area=0 if min_area is None else min_area,
+            max_area=-1 if max_area is None else max_area,
+            level=zoom_level
         )
-
+        
         def get_term(label):
             if binary:
                 if "cytomine_id_predict_term" not in cj.parameters or not cj.parameters.cytomine_id_predict_term:
@@ -347,62 +296,49 @@ def main(argv):
             # multi-class
             return [label]
 
-        zoom_mult = (2 ** cj.parameters.cytomine_zoom_level)
-        zones = extract_images_or_rois(cj.parameters)
-        for zone in cj.monitor(zones, start=50, end=90, period=0.05, prefix="Segmenting images/ROIs"):
-            results = workflow.process(zone)
-
-            if cj.parameters.cytomine_id_roi_term is not None:
-                ROI = change_referential(translate(zone.polygon_mask, zone.offset[0], zone.offset[1]), zone.base_image.height)
-                if cj.parameters.cytomine_zoom_level > 0:
-                    ROI = affine_transform(ROI, [zoom_mult, 0, 0, zoom_mult, 0, 0])
-
+        for roi, region in cj.monitor(zip(rois, regions), start=50, end=90, period=0.05, prefix="Segmenting images/ROIs"):
+            # pre-download tiles and delete tile after the region has been processed
+            with TemporaryDirectory() as tmpdir:
+                dump_region(
+                    roi, skip_save=True,
+                    zoom_level=zoom_level,
+                    slide_class=sldc_slide_class,
+                    tile_class=sldc_tile_class,
+                    working_path=tmpdir,
+                    n_jobs=0 if cj.parameters.n_jobs < 0 else max(1, cj.parameters.n_jobs))
+                tile_builder._working_path = tmpdir
+                results = workflow.process(region)
+                
             annotations = AnnotationCollection()
             for obj in results:
-                if not area_checker.check(obj.polygon):
+                if not area_checker.check(obj.polygon) or obj.polygon.is_empty:
                     continue
-                polygon = obj.polygon
-                if isinstance(zone, ImageWindow):
-                    polygon = affine_transform(polygon, [1, 0, 0, 1, zone.abs_offset_x, zone.abs_offset_y])
+                
+                if isinstance(obj.polygon, GeometryCollection): 
+                    geoms = flatten_geoms(obj.polygon)
+                else: 
+                    geoms = [obj.polygon]
 
+                # flatten one last time
+                for geom in geoms:
+                    if not isinstance(geom, Polygon):
+                        warnings.warn(f"some polygons could not be uploaded because they were not plain polygons (found '{type(geom)}'")
+                        continue
 
-                polygon = change_referential(polygon, zone.base_image.height)
-                if cj.parameters.cytomine_zoom_level > 0:
-                    polygon = affine_transform(polygon, [zoom_mult, 0, 0, zoom_mult, 0, 0])
+                    # move back to max zoom, whole image and lower corner referential
+                    polygon = geom.intersection(region.polygon_mask)
+                    polygon = change_referential(polygon, zoom_level=-zoom_level)
+                    polygon = change_referential(polygon, offset=[-region.offset[0], -region.offset[1]])
+                    polygon = change_referential(polygon, height=region.base_image.image_instance.height)
 
-
-                if cj.parameters.cytomine_id_roi_term is not None:
-                    polygon = polygon.intersection(ROI)
-
-                if not polygon.is_empty:
                     annotations.append(Annotation(
                         location=polygon.wkt,
                         id_terms=get_term(obj.label),
                         id_project=cj.project.id,
-                        id_image=zone.base_image.image_instance.id
+                        id_image=region.base_image.image_instance.id
                     ))
-            """        
-            Some annotations found thanks to the algorithm are Geometry Collections,
-            containing more than one element -> keep only polygons from those 
-            GeometryCollections
-            """
-            annotations_ok = AnnotationCollection()
-            for annotation in annotations:
-                if isinstance(shapely.wkt.loads(annotation.location), shapely.geometry.collection.GeometryCollection):
-                    for geom in shapely.wkt.loads(annotation.location):
-                        if isinstance(geom, shapely.geometry.Polygon):
-                            annotations_ok.append(Annotation(
-                                location=geom.wkt,
-                                id_terms=annotation.term,
-                                id_project=annotation.project,
-                                id_image=annotation.image
-                            ))
-                elif isinstance(shapely.wkt.loads(annotation.location), shapely.geometry.Polygon):
-                    annotations_ok.append(annotation)
-                else:
-                    continue
                     
-            annotations_ok.save()
+            annotations.save(n_workers=0 if cj.parameters.n_jobs < 0 else max(1, cj.parameters.n_jobs))
 
         cj.job.update(status=Job.TERMINATED, status_comment="Finish", progress=100)
 
