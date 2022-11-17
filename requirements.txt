@@ -1,0 +1,7 @@
+cytomine-python-client @ https://github.com/cytomine/Cytomine-python-client/archive/refs/tags/v2.3.3.zip
+joblib==1.2.0
+pyxit==1.1.5
+scikit-image==0.17.2
+scikit-learn==1.1.3
+sldc-cytomine==2.1.0
+sldc==1.4.2

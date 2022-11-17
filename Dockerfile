@@ -1,8 +1,10 @@
-FROM cytomine/software-python3-base:v2.2.2
+FROM python:3.8-slim-bullseye
 
 # --------------------------------------------------------------------------------------------
-# Instal Pyxit, Skimage and SLDC
-RUN pip install pyxit==1.1.5 scikit-image==0.17.2 sldc==1.4.1 sldc-cytomine==1.3.3
+# Install dependencies
+COPY requirements.txt /tmp/
+RUN pip install --upgrade pip
+RUN pip3 install -r /tmp/requirements.txt
 
 # --------------------------------------------------------------------------------------------
 ADD descriptor.json /app/descriptor.json
