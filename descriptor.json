@@ -1,4 +1,11 @@
 {
+  "name": "Segment-ML-MultiOutputET-Pred-ROI",
+  "description": "Segmentation based on extra trees",
+  "schema-version": "cytomine-0.1",
+  "container-image": {
+    "image": "cytomine/s_segment-ml-multioutputet-pred-roi",
+    "type": "singularity"
+  },
   "command-line": "python run.py CYTOMINE_HOST CYTOMINE_PUBLIC_KEY CYTOMINE_PRIVATE_KEY CYTOMINE_ID_PROJECT CYTOMINE_ID_SOFTWARE CYTOMINE_ID_IMAGES CYTOMINE_ID_ROI_TERM CYTOMINE_REVIEWED_ROI CYTOMINE_ZOOM_LEVEL CYTOMINE_TILE_SIZE CYTOMINE_TILE_OVERLAP N_JOBS UNION_ENABLED MIN_ANNOTATION_AREA MAX_ANNOTATION_AREA TILE_FILTER_MIN_STDDEV TILE_FILTER_MAX_MEAN CYTOMINE_ID_JOB PYXIT_PREDICTIONS_PER_PIXEL CYTOMINE_ID_PREDICT_TERM",
   "inputs": [
     {
@@ -53,7 +60,7 @@
     },
     {
       "name": "Cytomine image identifiers",
-      "description": "The identifiers of the images to process. If not specified all image of the project will be processed.",
+      "description": "The identifiers of the images to process. If not specified all image of the project will be considered.",
       "set-by-server": false,
       "value-key": "@ID",
       "optional": true,
@@ -65,25 +72,14 @@
     },
     {
       "name": "Cytomine roi term identifier",
-      "description": "If specified only process ROIs from annotation having the given term id.",
+      "description": "Term identifier for the region of interest annotations to consider. Segmentation will only be produced for the areas delineated by these annotations.",
       "set-by-server": false,
       "value-key": "@ID",
-      "optional": true,
+      "optional": false,
       "id": "cytomine_id_roi_term",
       "type": "Domain",
       "uri": "/api/project/$currentProject$/term.json",
       "uri-print-attribute": "name",
-      "command-line-flag": "--@id"
-    },
-    {
-      "name": "Cytomine reviewed annotations",
-      "description": "Use only reviewed annotations if true, otherwise use basic annotations (not reviewed). Only used if a roi term identifier is provided.",
-      "set-by-server": false,
-      "value-key": "@ID",
-      "optional": true,
-      "default-value": false,
-      "id": "cytomine_reviewed_roi",
-      "type": "Boolean",
       "command-line-flag": "--@id"
     },
     {
@@ -99,8 +95,8 @@
       "command-line-flag": "--@id"
     },
     {
-      "name": "Zoom level",
-      "description": "The zoom level to apply when fetching the tiles (0 for maximum resolution). If zoom_level > 0, tile size and overlap should be respectively set to 256 and 0 (IIP protocol).",
+      "name": "Cytomine zoom level",
+      "description": "The zoom level for reading the slides (0 for max zoom, 1 or more for smaller magnification)",
       "set-by-server": false,
       "value-key": "@ID",
       "default-value": 0,
@@ -110,8 +106,8 @@
       "command-line-flag": "--@id"
     },
     {
-      "name": "Tile size",
-      "description": "The size of the square tiles in pixels. Each processed image will be splitted into a set of tiles that will be processed independently. If union is enabled, the polygons found on each tiles will be merged when necessary.",
+      "name": "Cytomine tile size",
+      "description": "The size of the square tiles (in pixels). Each processed region will be splitted into a set of tiles that will be processed independently.",
       "set-by-server": false,
       "value-key": "@ID",
       "default-value": 512,
@@ -143,22 +139,11 @@
       "command-line-flag": "--@id"
     },
     {
-      "name": "Union enabled",
-      "description": "Whether or not to perform union of detected polygons over tiles.",
-      "set-by-server": false,
-      "value-key": "@ID",
-      "default-value": true,
-      "optional": true,
-      "id": "union_enabled",
-      "type": "Boolean",
-      "command-line-flag": "--@id"
-    },
-    {
       "name": "Min annotations area",
-      "description": "Minimum area for annotations. Annotations of which the area is smaller are not uploaded to the server (disabled by default).",
+      "description": "Minimum area (at zoom_level 0) for annotations (in pixels²). Annotations of which the area is smaller are not uploaded to the server (disabled by default).",
       "set-by-server": false,
       "value-key": "@ID",
-      "default-value": 0,
+      "default-value": null,
       "optional": true,
       "id": "min_annotation_area",
       "type": "Number",
@@ -166,10 +151,10 @@
     },
     {
       "name": "Max annotations area",
-      "description": "Maximum area for annotations. Annotations of which the area is larger are not uploaded to the server (-1 for disabling the filter, disabled by default).",
+      "description": "Maximum area (at zoom_level 0) for annotations (in pixels²). Annotations of which the area is larger are not uploaded to the server (disabled by default)",
       "set-by-server": false,
       "value-key": "@ID",
-      "default-value": -1,
+      "default-value": null,
       "optional": true,
       "id": "max_annotation_area",
       "type": "Number",
@@ -221,13 +206,6 @@
       "type": "Number",
       "command-line-flag": "--@id"
     }
-  ],
-  "name": "Segment-ML-MultiOutputET-Pred-BI",
-  "description": "Segmentation based on extra trees",
-  "schema-version": "cytomine-0.1",
-  "container-image": {
-    "image": "cytomine/s_segment-ml-multioutputet-pred-bi",
-    "type": "singularity"
-  }
+  ]
 }
 
