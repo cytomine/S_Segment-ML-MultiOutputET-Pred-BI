@@ -24,6 +24,18 @@ from sldc_cytomine.dump import load_region_tiles
 from sldc_cytomine.autodetect import infer_protocols
 
 
+def flatten(_polygon):
+  if not hasattr(_polygon, "geoms"):
+    if _polygon.area > 0:
+      return [_polygon]
+    else: 
+      return []
+  _out = []
+  for geom in _polygon.geoms:
+    _out.extend(flatten(geom))
+  return _out
+
+
 def extract_windows_and_identifiers(image, identifiers, dims, step):
     window_n_pixels = np.product(dims)
     subwindows = view_as_windows(image, dims, step=step)
@@ -174,19 +186,17 @@ class ExtraTreesSegmenter(SemanticSegmenter):
 
 
 class AnnotationAreaChecker(object):
-    def __init__(self, min_area, max_area, level):
+    def __init__(self, min_area, max_area):
         self._min_area = min_area
         self._max_area = max_area
-        self._level = level
 
     def check(self, annot):
-        zoom_area_coef = 2 ** (2 * self._level)
-        min_area = self._min_area / zoom_area_coef
-        max_area = self._max_area / zoom_area_coef
+        min_area = self._min_area
+        max_area = self._max_area
         if max_area < 0:
-            return min_area < annot.area * zoom_area_coef
+            return min_area < annot.area
         else:
-            return min_area < (annot.area * zoom_area_coef) < max_area
+            return min_area < (annot.area) < max_area
 
 
 def validate_train_job(job: Job, properties: dict):
@@ -294,8 +304,7 @@ def main(argv):
         max_area = cj.parameters.max_annotation_area
         area_checker = AnnotationAreaChecker(
             min_area=0 if min_area is None else min_area,
-            max_area=-1 if max_area is None else max_area,
-            level=zoom_level
+            max_area=-1 if max_area is None else max_area
         )
         
         def get_term(label):
@@ -321,37 +330,25 @@ def main(argv):
                 
             annotations = AnnotationCollection()
             for obj in results:
-                if not area_checker.check(obj.polygon) or obj.polygon.is_empty:
-                    continue
-                
-                if isinstance(obj.polygon, GeometryCollection): 
-                    geoms = flatten_geoms(obj.polygon)
-                else: 
-                    geoms = [obj.polygon]
 
-                # flatten one last time
-                for geom in geoms:
-                    if not isinstance(geom, Polygon) or not geom.is_valid:
-                        warnings.warn(f"some polygons could not be uploaded because they were not plain polygons (found '{type(geom)}') or where invalid ({not geom.is_valid})")
+                # move back to max zoom, whole image and lower corner referential
+                polygon = obj.polygon.intersection(region.polygon_mask)
+                polygon = change_referential(polygon, zoom_level=-zoom_level)
+                polygon = change_referential(polygon, offset=[-region.offset[0], -region.offset[1]])
+                polygon = change_referential(polygon, height=region.base_image.image_instance.height)
+
+                for geom in flatten(polygon):
+                    if not area_checker.check(geom):
                         continue
-
-                    # move back to max zoom, whole image and lower corner referential
-                    polygon = geom.intersection(region.polygon_mask)
-                    polygon = change_referential(polygon, zoom_level=-zoom_level)
-                    polygon = change_referential(polygon, offset=[-region.offset[0], -region.offset[1]])
-                    polygon = change_referential(polygon, height=region.base_image.image_instance.height)
-
                     annotations.append(Annotation(
                         location=polygon.wkt,
                         id_terms=get_term(obj.label),
                         id_project=cj.project.id,
                         id_image=region.base_image.image_instance.id
                     ))
-            
-            try:
-                annotations.save(n_workers=0 if cj.parameters.n_jobs < 0 else max(1, cj.parameters.n_jobs))
-            except CollectionPartialUploadException:
-                cj.logger.error(f"some annotations could not be uploaded")
+
+            annotations.save(n_workers=0 if cj.parameters.n_jobs < 0 else max(1, cj.parameters.n_jobs))
+
 
         cj.job.update(status=Job.TERMINATED, status_comment="Finish", progress=100)
 
