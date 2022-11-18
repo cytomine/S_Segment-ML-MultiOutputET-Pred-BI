@@ -249,9 +249,7 @@ def main(argv):
 
         # fetch ROI annotations, all users and algo
         rois_fetch_params = { "terms": [cj.parameters.cytomine_id_roi_term], "project": cj.project.id, "showWKT": True }
-        rois_user = AnnotationCollection(**rois_fetch_params).fetch()
-        rois_algo = AnnotationCollection(**rois_fetch_params, includeAlgo=True).fetch()
-        rois = rois_user + rois_algo
+        rois = AnnotationCollection(**rois_fetch_params, includeAlgo=True).fetch()
         
         regions = list()
         for roi in rois:
