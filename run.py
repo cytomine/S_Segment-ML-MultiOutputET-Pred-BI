@@ -7,9 +7,9 @@ import joblib
 import numpy as np
 import pyxit
 from cytomine import CytomineJob
-from cytomine.models import (Annotation, AnnotationCollection,
-                             AttachedFileCollection, ImageInstance,
-                             ImageInstanceCollection, Job, PropertyCollection)
+from cytomine.models.collection import CollectionPartialUploadException
+from cytomine.models import Annotation, ImageInstance, Job, PropertyCollection
+from cytomine.models import AnnotationCollection, ImageInstanceCollection, AttachedFileCollection
 from cytomine.utilities.software import parse_domain_list, str2bool
 from shapely import wkt
 from shapely.affinity import affine_transform
@@ -332,8 +332,8 @@ def main(argv):
 
                 # flatten one last time
                 for geom in geoms:
-                    if not isinstance(geom, Polygon):
-                        warnings.warn(f"some polygons could not be uploaded because they were not plain polygons (found '{type(geom)}'")
+                    if not isinstance(geom, Polygon) or not geom.is_valid:
+                        warnings.warn(f"some polygons could not be uploaded because they were not plain polygons (found '{type(geom)}') or where invalid ({not geom.is_valid})")
                         continue
 
                     # move back to max zoom, whole image and lower corner referential
@@ -348,8 +348,11 @@ def main(argv):
                         id_project=cj.project.id,
                         id_image=region.base_image.image_instance.id
                     ))
-                    
-            annotations.save(n_workers=0 if cj.parameters.n_jobs < 0 else max(1, cj.parameters.n_jobs))
+            
+            try:
+                annotations.save(n_workers=0 if cj.parameters.n_jobs < 0 else max(1, cj.parameters.n_jobs))
+            except CollectionPartialUploadException:
+                cj.logger.error(f"some annotations could not be uploaded")
 
         cj.job.update(status=Job.TERMINATED, status_comment="Finish", progress=100)
 
