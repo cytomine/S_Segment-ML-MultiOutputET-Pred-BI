@@ -20,7 +20,7 @@ from sldc.locator import flatten_geoms
 from sldc import (Logger, SemanticSegmenter, SSLWorkflowBuilder,
                   StandardOutputLogger, TileBuilder, TileTopology)
 from sldc_cytomine import CytomineTileBuilder
-from sldc_cytomine.dump import dump_region
+from sldc_cytomine.dump import load_region_tiles
 from sldc_cytomine.autodetect import infer_protocols
 
 
@@ -310,12 +310,11 @@ def main(argv):
         for roi, region in cj.monitor(zip(rois, regions), start=50, end=90, period=0.05, prefix="Segmenting images/ROIs"):
             # pre-download tiles and delete tile after the region has been processed
             with TemporaryDirectory() as tmpdir:
-                dump_region(
-                    roi, skip_save=True,
+                load_region_tiles(
+                    roi, tmpdir,
                     zoom_level=zoom_level,
                     slide_class=sldc_slide_class,
                     tile_class=sldc_tile_class,
-                    working_path=tmpdir,
                     n_jobs=0 if cj.parameters.n_jobs < 0 else max(1, cj.parameters.n_jobs))
                 tile_builder._working_path = tmpdir
                 results = workflow.process(region)
