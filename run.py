@@ -252,7 +252,7 @@ def main(argv):
         rois_user = AnnotationCollection(**rois_fetch_params).fetch()
         rois_algo = AnnotationCollection(**rois_fetch_params, includeAlgo=True).fetch()
         rois = rois_user + rois_algo
-
+        
         regions = list()
         for roi in rois:
             if roi.image not in sldc_slides_map:
@@ -307,7 +307,7 @@ def main(argv):
                 else:
                     return [int(cj.parameters.cytomine_id_predict_term)]
             # multi-class
-            return [label]
+            return [int(label)]
 
         for roi, region in cj.monitor(zip(rois, regions), start=50, end=90, period=0.05, prefix="Segmenting images/ROIs"):
             # pre-download tiles and delete tile after the region has been processed
