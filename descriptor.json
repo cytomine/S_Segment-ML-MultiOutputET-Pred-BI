@@ -128,7 +128,7 @@
       "command-line-flag": "--@id"
     },
     {
-      "default-value": 1,
+      "default-value": -1,
       "name": "Number of jobs",
       "description": "Number of jobs for training",
       "set-by-server": false,
