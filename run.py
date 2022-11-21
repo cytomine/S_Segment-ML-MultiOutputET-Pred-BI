@@ -107,7 +107,8 @@ def change_referential(p, offset=None, zoom_level=0, height=None):
     p = affine_transform(p, [1, 0, 0, 1, -offset[0], -offset[1]])
   if height is not None:
     p = affine_transform(p, [1, 0, 0, -1, 0, height])
-  p = affine_transform(p, [1 / 2 ** zoom_level, 0, 0, 1 / 2 ** zoom_level, 0, 0])
+  if zoom_level != 0:
+    p = affine_transform(p, [1 / 2 ** zoom_level, 0, 0, 1 / 2 ** zoom_level, 0, 0])
   return p
 
 
@@ -335,10 +336,9 @@ def main(argv):
 
                 # move back to max zoom, whole image and lower corner referential
                 polygon = obj.polygon.intersection(region.polygon_mask)
-                polygon = change_referential(polygon, 
-                    offset=[-region.offset[0], -region.offset[1]],
-                    zoom_level=-zoom_level,
-                    height=region.base_image.image_instance.height)
+                polygon = change_referential(polygon, offset=[-region.offset[0], -region.offset[1]]) # at provided zoom level 
+                polygon = change_referential(polygon, zoom_level=-zoom_level)
+                polygon = change_referential(polygon, height=region.base_image.image_instance.height) # at zoom 0
                 
                 for geom in flatten(polygon):
                     if not area_checker.check(geom):
