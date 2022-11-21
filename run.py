@@ -341,7 +341,7 @@ def main(argv):
                     if not area_checker.check(geom):
                         continue
                     annotations.append(Annotation(
-                        location=polygon.wkt,
+                        location=geom.wkt,
                         id_terms=get_term(obj.label),
                         id_project=cj.project.id,
                         id_image=region.base_image.image_instance.id
