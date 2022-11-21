@@ -260,6 +260,7 @@ def main(argv):
         # fetch ROI annotations, all users and algo
         rois_fetch_params = { "terms": [cj.parameters.cytomine_id_roi_term], "project": cj.project.id, "showWKT": True }
         rois = AnnotationCollection(**rois_fetch_params, includeAlgo=True).fetch()
+        kept_rois = list()
         
         regions = list()
         for roi in rois:
@@ -268,6 +269,7 @@ def main(argv):
             slide = sldc_slides_map[roi.image]
             roi_polygon = change_referential(wkt.loads(roi.location), zoom_level=zoom_level, height=slide.image_instance.height)
             regions.append(slide.window_from_polygon(roi_polygon, mask=True))
+            kept_rois.append(roi)
 
         if len(regions) == 0:
             raise ValueError(f"no regions found with ROI term identifier {cj.parameters.cytomine_id_roi_term}")
@@ -316,7 +318,7 @@ def main(argv):
             # multi-class
             return [int(label)]
 
-        for roi, region in cj.monitor(zip(rois, regions), start=50, end=90, period=0.05, prefix="Segmenting images/ROIs"):
+        for roi, region in cj.monitor(zip(kept_rois, regions), start=50, end=90, period=0.05, prefix="Segmenting images/ROIs"):
             # pre-download tiles and delete tile after the region has been processed
             with TemporaryDirectory() as tmpdir:
                 load_region_tiles(
